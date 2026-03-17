@@ -1,19 +1,39 @@
 const WebSocket = require("ws");
-const http = require("http");
+const express = require("express");
+const cors = require("cors");
 
-// Render gives dynamic port
-const PORT = process.env.PORT || 3000;
+const app = express();
+app.use(cors());
 
-// Create HTTP server (IMPORTANT)
-const server = http.createServer((req, res) => {
-  res.writeHead(200);
-  res.end("WebRTC signaling server running");
+/* 🔑 Twilio Credentials */
+const ACCOUNT_SID = "AC236b13ef6dd3d799efa267c900de2154";
+const AUTH_TOKEN = "c613f86bfba2b5901eab1e163df1878a";
+
+/* 🌍 TURN API */
+app.get("/turn", (req, res) => {
+  res.json({
+    iceServers: [
+      {
+        urls: "stun:global.stun.twilio.com:3478"
+      },
+      {
+        urls: "turn:global.turn.twilio.com:3478?transport=udp",
+        username: ACCOUNT_SID,
+        credential: AUTH_TOKEN
+      }
+    ]
+  });
 });
 
-// Attach WebSocket to HTTP server
+/* 🚀 HTTP server */
+const server = app.listen(process.env.PORT || 10000, () => {
+  console.log("🚀 Server running");
+});
+
+/* 🔌 WebSocket signaling */
 const wss = new WebSocket.Server({ server });
 
-const clients = {};
+let clients = {};
 
 wss.on("connection", (ws) => {
 
@@ -21,28 +41,37 @@ wss.on("connection", (ws) => {
 
   ws.on("message", (message) => {
 
-    const data = JSON.parse(message);
+    try {
+      const data = JSON.parse(message);
 
-    if (data.type === "register") {
-      clients[data.id] = ws;
-      console.log("✅ Registered:", data.id);
-      return;
-    }
+      /* REGISTER */
+      if (data.type === "register") {
+        ws.deviceId = data.id;
+        clients[data.id] = ws;
 
-    if (data.target && clients[data.target]) {
-      console.log(`📡 ${data.type} ${data.from} → ${data.target}`);
-      clients[data.target].send(JSON.stringify(data));
+        console.log("✅ Registered:", data.id);
+        return;
+      }
+
+      /* FORWARD SIGNALS */
+      if (data.target && clients[data.target]) {
+        clients[data.target].send(JSON.stringify(data));
+
+        console.log(`📡 ${data.type} ${data.from} → ${data.target}`);
+      }
+
+    } catch (e) {
+      console.log("❌ Error:", e);
     }
 
   });
 
   ws.on("close", () => {
-    console.log("❌ Client disconnected");
+    console.log("❌ Disconnected:", ws.deviceId);
+
+    if (ws.deviceId) {
+      delete clients[ws.deviceId];
+    }
   });
 
-});
-
-// Start server (IMPORTANT)
-server.listen(PORT, "0.0.0.0", () => {
-  console.log(`🚀 Server running on port ${PORT}`);
 });
