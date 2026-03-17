@@ -1,0 +1,36 @@
+const WebSocket = require("ws");
+
+const PORT = process.env.PORT || 3000;
+
+const wss = new WebSocket.Server({ port: PORT });
+
+const clients = {};
+
+wss.on("connection", (ws) => {
+
+  console.log("🔗 Client connected");
+
+  ws.on("message", (message) => {
+
+    const data = JSON.parse(message);
+
+    if (data.type === "register") {
+      clients[data.id] = ws;
+      console.log("✅ Registered:", data.id);
+      return;
+    }
+
+    if (data.target && clients[data.target]) {
+      console.log(`📡 ${data.type} ${data.from} → ${data.target}`);
+      clients[data.target].send(JSON.stringify(data));
+    }
+
+  });
+
+  ws.on("close", () => {
+    console.log("❌ Client disconnected");
+  });
+
+});
+
+console.log("🚀 Server running");
