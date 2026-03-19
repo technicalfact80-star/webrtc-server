@@ -5,73 +5,50 @@ const cors = require("cors");
 const app = express();
 app.use(cors());
 
-/* 🔑 Twilio Credentials */
-const ACCOUNT_SID = "AC236b13ef6dd3d799efa267c900de2154";
-const AUTH_TOKEN = "c613f86bfba2b5901eab1e163df1878a";
-
-/* 🌍 TURN API */
+// 🔥 PREMIUM TURN SERVERS FOR MOBILE DATA BYPASS
 app.get("/turn", (req, res) => {
   res.json({
     iceServers: [
+      { urls: "stun:stun.l.google.com:19302" },
+      { urls: "stun:stun1.l.google.com:19302" },
       {
-        urls: "stun:global.stun.twilio.com:3478"
-      },
-      {
-        urls: "turn:global.turn.twilio.com:3478?transport=udp",
-        username: ACCOUNT_SID,
-        credential: AUTH_TOKEN
+        urls: "turn:openrelay.metered.ca:443?transport=tcp", // TCP bypasses Jio/Airtel Firewalls
+        username: "openrelayproject",
+        credential: "openrelayproject"
       }
     ]
   });
 });
 
-/* 🚀 HTTP server */
 const server = app.listen(process.env.PORT || 10000, () => {
-  console.log("🚀 Server running");
+  console.log("🚀 FlashGet Signaling Server Running!");
 });
 
-/* 🔌 WebSocket signaling */
 const wss = new WebSocket.Server({ server });
-
 let clients = {};
 
 wss.on("connection", (ws) => {
-
-  console.log("🔗 Client connected");
-
   ws.on("message", (message) => {
-
     try {
-      const data = JSON.parse(message);
+      const msgString = message.toString();
+      const data = JSON.parse(msgString);
 
-      /* REGISTER */
       if (data.type === "register") {
         ws.deviceId = data.id;
         clients[data.id] = ws;
-
-        console.log("✅ Registered:", data.id);
+        console.log(`✅ Registered: ${data.id}`);
         return;
       }
 
-      /* FORWARD SIGNALS */
       if (data.target && clients[data.target]) {
-        clients[data.target].send(JSON.stringify(data));
-
-        console.log(`📡 ${data.type} ${data.from} → ${data.target}`);
+        clients[data.target].send(msgString);
       }
-
     } catch (e) {
-      console.log("❌ Error:", e);
+      console.log("❌ Error:", e.message);
     }
-
   });
 
   ws.on("close", () => {
-    console.log("❌ Disconnected:", ws.deviceId);
-
-    if (ws.deviceId) {
-      delete clients[ws.deviceId];
-    }
+    if (ws.deviceId) delete clients[ws.deviceId];
   });
-
 });
