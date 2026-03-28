@@ -6,59 +6,88 @@ const twilio = require("twilio");
 const app = express();
 app.use(cors());
 
-/* 🔑 TWILIO CREDENTIALS */
+/* 🔑 TWILIO */
 const ACCOUNT_SID = "AC236b13ef6dd3d799efa267c900de2154";
 const AUTH_TOKEN = "c613f86bfba2b5901eab1e163df1878a";
 const client = twilio(ACCOUNT_SID, AUTH_TOKEN);
 
-/* 🌍 DYNAMIC TURN API (For Hotspot/Mobile Data Support) */
+/* 🌍 TURN */
 app.get("/turn", async (req, res) => {
   try {
     const token = await client.tokens.create();
     res.json({ iceServers: token.iceServers });
-    console.log("✅ Twilio TURN Token Generated");
+    console.log("✅ TURN Generated");
   } catch (error) {
-    console.error("❌ Twilio Error:", error.message);
+    console.error("❌ TURN ERROR:", error.message);
     res.json({
       iceServers: [
-        { urls: "stun:stun.l.google.com:19302" },
-        { urls: "turn:openrelay.metered.ca:443?transport=tcp", username: "openrelayproject", credential: "openrelayproject" }
+        { urls: "stun:stun.l.google.com:19302" }
       ]
     });
   }
 });
 
-/* 🚀 HTTP server */
+/* 🚀 SERVER */
 const server = app.listen(process.env.PORT || 10000, () => {
-  console.log("🚀 Production Signaling Server running");
+  console.log("🚀 SIGNALING SERVER RUNNING");
 });
 
-/* 🔌 WebSocket signaling (Buffer Crash Fixed) */
+/* 🔌 WEBSOCKET */
 const wss = new WebSocket.Server({ server });
+
 let clients = {};
 
 wss.on("connection", (ws) => {
+  console.log("🔌 NEW CLIENT CONNECTED");
+
   ws.on("message", (message) => {
     try {
-      const msgString = message.toString();
-      const data = JSON.parse(msgString);
+      const msg = message.toString();
+      const data = JSON.parse(msg);
 
+      console.log("📩 RECEIVED:", data.type);
+
+      // =====================
+      // REGISTER
+      // =====================
       if (data.type === "register") {
         ws.deviceId = data.id;
         clients[data.id] = ws;
-        console.log("✅ Registered:", data.id);
+
+        console.log("✅ REGISTERED:", data.id);
+        console.log("👥 TOTAL CLIENTS:", Object.keys(clients).length);
+
         return;
       }
 
-      if (data.target && clients[data.target]) {
-        clients[data.target].send(msgString);
+      // =====================
+      // ROUTING FIX (MAIN FIX)
+      // =====================
+      const targetId = data.target || data.to;
+
+      if (!targetId) {
+        console.log("⚠ NO TARGET FOUND");
+        return;
       }
+
+      if (!clients[targetId]) {
+        console.log("❌ TARGET NOT CONNECTED:", targetId);
+        return;
+      }
+
+      console.log(`📤 FORWARD ${data.type} → ${targetId}`);
+
+      clients[targetId].send(msg);
+
     } catch (e) {
-      console.log("❌ Error:", e.message);
+      console.log("❌ ERROR:", e.message);
     }
   });
 
   ws.on("close", () => {
-    if (ws.deviceId) delete clients[ws.deviceId];
+    if (ws.deviceId) {
+      console.log("❌ DISCONNECTED:", ws.deviceId);
+      delete clients[ws.deviceId];
+    }
   });
 });
